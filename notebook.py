@@ -76,7 +76,6 @@ def get_model(n):
 # !pip install pymongo
 import pymongo
 from keras.utils import Sequence
-keras.backend.set_backend('torch')
 
 # Connect to your MongoDB database
 client = pymongo.MongoClient(mongo_url)
