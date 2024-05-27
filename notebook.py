@@ -52,15 +52,15 @@ def most_similar(L1:list[str],L2:list[str]):
   print(a)
   return torch.argmax(a, dim=1)
 
-L1=["J'aime les burgers mcdonalds","voiture"]
-L2=["J'aime les burgers mcdonalds","J'aime les voitures","J'aime pas les voitures"]
+# L1=["J'aime les burgers mcdonalds","voiture"]
+# L2=["J'aime les burgers mcdonalds","J'aime les voitures","J'aime pas les voitures"]
 
-x,y=concat_vector_embeddings(L1,L2)
+# x,y=concat_vector_embeddings(L1,L2)
 
-print(most_similar(L1,L2))
+# print(most_similar(L1,L2))
 
-output = pairwise_cosine_similarity(x, y)
-print(output)
+# output = pairwise_cosine_similarity(x, y)
+# print(output)
 
 import keras
 
@@ -82,12 +82,14 @@ client = pymongo.MongoClient(mongo_url)
 db = client["RemiGOAT"]
 collection = db["Message"]
 
+k=0
 for x in collection.find():
   criteria = {"_id": x["_id"]}
   embed=get_sentence_embedding(x["body"]).detach().cpu().numpy().tolist()
   update_data = {"$set": {"embedding": embed}}
   result = collection.update_one(criteria, update_data)
-  print("ok")
+  k+=1
+  print(k)
 
 
 class MongoDataGenerator(Sequence):
