@@ -88,7 +88,7 @@ for x in collection.find():
   embed=get_sentence_embedding(x["body"]).detach().cpu().numpy().tolist()
   update_data = {"$set": {"embedding": embed}}
   result = collection.update_one(criteria, update_data)
-  # print(embed)
+  print("ok")
 
 
 class MongoDataGenerator(Sequence):
