@@ -10,6 +10,9 @@ Original file is located at
 import torch
 from transformers import BertTokenizer, BertModel
 import numpy as np
+from dotenv import load_dotenv
+load_dotenv()
+mongo_url=os.environ.get('MONGOURL')
 
 # Load the BERT model and tokenizer
 tokenizer = BertTokenizer.from_pretrained('sentence-transformers/all-mpnet-base-v2')
@@ -35,7 +38,7 @@ def get_sentence_embedding(text:str):
 
 #print(get_sentence_embedding(text))
 
-!pip install torchmetrics
+# !pip install torchmetrics
 from torchmetrics.functional import pairwise_cosine_similarity
 
 def concat_vector_embeddings(L1:list[str],L2:list[str]):
@@ -70,12 +73,12 @@ def get_model(n):
     return model
 
 #model = get_model(2)
-!pip install pymongo
+# !pip install pymongo
 import pymongo
 from keras.utils import Sequence
 
 # Connect to your MongoDB database
-client = pymongo.MongoClient("mongodb://redalex:redalex$@4.233.185.114:27017/")
+client = pymongo.MongoClient(mongo_url)
 db = client["RemiGOAT"]
 collection = db["Message"]
 
