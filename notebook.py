@@ -7,19 +7,24 @@ Original file is located at
     https://colab.research.google.com/drive/1xbFSyUpmSLup2-QSEftWGIB7Q37WQSeR
 """
 import os
+import sys
 import torch
 from transformers import BertTokenizer, BertModel
+from sklearn import preprocessing
 import numpy as np
 from dotenv import load_dotenv
+sys.path.append("modules")
+from check_enc import *
+
+
 load_dotenv()
 mongo_url=os.environ.get('MONGOURL')
 
 # Load the BERT model and tokenizer
-tokenizer = BertTokenizer.from_pretrained('sentence-transformers/all-mpnet-base-v2')
-model = BertModel.from_pretrained('sentence-transformers/all-mpnet-base-v2')
+
 
 text = "This is an example sentence."
-def get_sentence_embedding(text:str):
+def get_sentence_embedding(text:str,tokenizer,model):
   # Preprocess the input text
   inputs = tokenizer.encode_plus(
       text,
@@ -34,7 +39,10 @@ def get_sentence_embedding(text:str):
 
   # Extract the sentence embedding
   sentence_embedding = torch.mean(last_hidden_states, dim=1)
-  return sentence_embedding
+  return sentence_embedding[0]
+
+def meta_function_embedding(tokenizer,model):
+  return lambda text : get_sentence_embedding(text,tokenizer,model)
 
 #print(get_sentence_embedding(text))
 
@@ -62,82 +70,136 @@ def most_similar(L1:list[str],L2:list[str]):
 # output = pairwise_cosine_similarity(x, y)
 # print(output)
 
-import keras
-
-def get_model(n):
-    inputs = keras.Input(shape=(768,), name="embeddings")
-    x1 = keras.layers.Dense(64, activation="relu")(inputs)
-    x2 = keras.layers.Dense(64, activation="relu")(x1)
-    outputs = keras.layers.Dense(n, name="predictions")(x2)
-    model = keras.Model(inputs=inputs, outputs=outputs)
-    return model
 
 #model = get_model(2)
 # !pip install pymongo
 import pymongo
-from keras.utils import Sequence
+import pandas as pd
 
+
+file_path="sentiment_dataset/train.csv"
+le = preprocessing.LabelEncoder()
+
+df=pd.read_csv(file_path, encoding=check_enc(file_path))
+df.dropna(inplace=True)
+df['sentiment'] = le.fit_transform(df['sentiment'])
+# print(df[["text","sentiment"]].head())
+
+# L=[]
+# for index, row in df.iterrows():
+#   embed=get_sentence_embedding_list(row['text'])
+#   L.append(embed)
+#   print(index)
+# embeddings=pd.Series(L)
+# df["embedding"]=embeddings
+# print(df.columns)
+# df.to_csv("sentiment_dataset/train_embed.csv", sep='\t')
+
+
+# file_path="sentiment_dataset/train_embed.csv"
+# df=pd.read_csv(file_path, encoding=check_enc(file_path), sep="\t")
+# le = preprocessing.LabelEncoder()
+# df['sentiment'] = le.fit_transform(df['sentiment'])
+
+# print(eval(df[df["id"]==0]["embedding"][0])[0])
 # Connect to your MongoDB database
-client = pymongo.MongoClient(mongo_url)
-db = client["RemiGOAT"]
-collection = db["Message"]
+# client = pymongo.MongoClient(mongo_url)
+# db = client["RemiGOAT"]
+# collection = db["Message"]
 
-k=0
-for x in collection.find():
-  criteria = {"_id": x["_id"]}
-  embed=get_sentence_embedding(x["body"]).detach().cpu().numpy().tolist()
-  update_data = {"$set": {"embedding": embed}}
-  result = collection.update_one(criteria, update_data)
-  k+=1
-  print(k)
-
-
-class MongoDataGenerator(Sequence):
-    def __init__(self, collection, batch_size):
-        self.collection = collection
-        self.batch_size = batch_size
-
-    def __len__(self):
-        return len(self.collection.find())
-
-    def __getitem__(self, idx):
-        batch = []
-        for i in range(idx * self.batch_size, (idx + 1) * self.batch_size):
-            document = self.collection.find_one(i)
-            data = document["data"]
-            label = document["label"]
-            batch.append((data, label))
-        return batch
+# k=0
+# for x in collection.find():
+#   criteria = {"_id": x["_id"]}
+#   embed=get_sentence_embedding(x["body"]).detach().cpu().numpy().tolist()
+#   update_data = {"$set": {"embedding": embed}}
+#   result = collection.update_one(criteria, update_data)
+#   k+=1
+#   print(k)
 
 
-def train_model(model,epochs,batch_size,train_dataloader):
-  optimizer = keras.optimizers.Adam(learning_rate=1e-3)
-  loss_fn = keras.losses.CategoricalCrossentropy(from_logits=True)
-  for epoch in range(epochs):
-      print(f"\nStart of epoch {epoch}")
-      for step, (inputs, targets) in enumerate(train_dataloader):
-          # Forward pass
-          logits = model(inputs)
-          loss = loss_fn(targets, logits)
+import torch
+from torch import nn
 
-          # Backward pass
-          model.zero_grad()
-          trainable_weights = [v for v in model.trainable_weights]
+# Define the model class
+class TorchTextClassifier(nn.Module):
+  def __init__(self, input_dim, hidden_dim, hidden_dim_2, num_classes,tokenizer,model_transformer):
+    super(TorchTextClassifier, self).__init__()
+    # Define layers
+    self.get_embedding = meta_function_embedding(tokenizer,model_transformer)
+    self.linear1 = nn.Linear(input_dim, hidden_dim)
+    self.relu = nn.ReLU()
+    self.linear2 = nn.Linear(hidden_dim, hidden_dim_2)
+    self.linear3 = nn.Linear(hidden_dim_2, num_classes)
+    self.softmax = nn.Softmax(dim=-1)
 
-          # Call torch.Tensor.backward() on the loss to compute gradients
-          # for the weights.
-          loss.backward()
-          gradients = [v.value.grad for v in trainable_weights]
+  def forward(self, x:str):
+    # Pass through layers
+    x = self.get_embedding(x)
+    x = self.linear1(x)
+    x = self.relu(x)
+    x = self.linear2(x)
+    x = self.relu(x)
+    x = self.linear3(x)
+    x = self.softmax(x)
+    return x
 
-          # Update weights
-          with torch.no_grad():
-              optimizer.apply(gradients, trainable_weights)
+# Example usage
+# Assuming your data is in a NumPy array called 'data' with shape (n_samples, input_dim)
+# and labels in another NumPy array called 'labels' with shape (n_samples,)
 
-          # Log every 100 batches.
-          if step % 100 == 0:
-              print(
-                  f"Training loss (for 1 batch) at step {step}: {loss.detach().numpy():.4f}"
-              )
-              print(f"Seen so far: {(step + 1) * batch_size} samples")
-  return model
+# Define model parameters
+input_dim = 768 # Get the number of features from data
+hidden_dim = 64  # Define the size of the hidden layer
+hidden_dim_2 = 32
+num_classes = 3  # Get the number of unique categories in labels
+
+tokenizer = BertTokenizer.from_pretrained('sentence-transformers/all-mpnet-base-v2')
+model_transformer = BertModel.from_pretrained('sentence-transformers/all-mpnet-base-v2')
+
+# Create the model instance
+model = TorchTextClassifier(input_dim, hidden_dim, hidden_dim_2, num_classes,tokenizer,model_transformer)
+
+# Define loss function and optimizer (replace these based on your needs)
+criterion = nn.CrossEntropyLoss()
+optimizer = torch.optim.Adam(model.parameters())
+
+# Training loop
+for epoch in range(10):  # loop over the dataset multiple times
+    for index, row in df.iterrows():
+        # get the inputs; data is a list of tuples (images, labels)
+        inputs = row["text"]
+        if row["sentiment"] == 0:
+          labels=[1,0,0]
+        elif row["sentiment"] == 1:
+          labels=[0,1,0]
+        else :
+          labels=[0,0,1]
+        labels=torch.tensor(labels)
+        # zero the parameter gradients
+        optimizer.zero_grad()
+
+        # forward pass
+        outputs = model(inputs)
+        loss = criterion(outputs, labels.float())
+
+        # backward pass
+        loss.backward()
+
+        # update the model parameters
+        optimizer.step()
+
+        if index % 100 == 99:  # print every 100 mini-batches
+            print(f'Epoch {epoch+1}, Batch {index+1}, Loss: {loss.item()}')
+# Prediction example
+# Convert data to tensor
+# test_data = torch.from_numpy(data[0]).float()  # Assuming you want to predict for the first sample
+
+# Get the model prediction
+# prediction = model(test_data)
+
+# Get the predicted class index with the highest probability
+# predicted_class = torch.argmax(prediction).item()
+
+# print(f"Predicted class for the first sample: {predicted_class}")
+
 
