@@ -34,7 +34,3 @@ jobs:
         with:
           push: true
           tags: alexandreb2/redalexmooc:latest
-
-      - name: Push image (optional, for manual testing)
-        run: |
-          docker push alexandreb2/redalexmooc:latest
