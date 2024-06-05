@@ -20,6 +20,7 @@ from check_enc import *
 load_dotenv()
 mongo_url=os.environ.get('MONGOURL')
 
+
 # Load the BERT model and tokenizer
 
 
@@ -49,13 +50,17 @@ def meta_function_embedding(tokenizer,model):
 # !pip install torchmetrics
 from torchmetrics.functional import pairwise_cosine_similarity
 
-def concat_vector_embeddings(L1:list[str],L2:list[str]):
-  x=torch.cat(tuple([get_sentence_embedding(e) for e in L1]),dim=0)
-  y=torch.cat(tuple([get_sentence_embedding(e) for e in L2]),dim=0)
+def concat_vector_embeddings(L1:list[str],L2:list[str],tokenizer,model):
+  x=torch.cat(tuple([get_sentence_embedding(e,tokenizer,model) for e in L1]),dim=0)
+  y=torch.cat(tuple([get_sentence_embedding(e,tokenizer,model) for e in L2]),dim=0)
   return x,y
 
-def most_similar(L1:list[str],L2:list[str]):
-  x,y=concat_vector_embeddings(L1,L2)
+def self_concat_vector_embeddings_np(L:list[str],tokenizer,model):
+  x=np.array([get_sentence_embedding(e,tokenizer,model).detach().numpy().tolist() for e in L])
+  return x
+
+def most_similar(L1:list[str],L2:list[str],tokenizer,model):
+  x,y=concat_vector_embeddings(L1,L2,tokenizer,model)
   a=pairwise_cosine_similarity(x, y)
   print(a)
   return torch.argmax(a, dim=1)
@@ -71,18 +76,18 @@ def most_similar(L1:list[str],L2:list[str]):
 # print(output)
 
 
-#model = get_model(2)
+
 # !pip install pymongo
 import pymongo
 import pandas as pd
 
 
-file_path="sentiment_dataset/train.csv"
-le = preprocessing.LabelEncoder()
+# file_path="sentiment_dataset/train.csv"
+# le = preprocessing.LabelEncoder()
 
-df=pd.read_csv(file_path, encoding=check_enc(file_path))
-df.dropna(inplace=True)
-df['sentiment'] = le.fit_transform(df['sentiment'])
+# df=pd.read_csv(file_path, encoding=check_enc(file_path))
+# df.dropna(inplace=True)
+# df['sentiment'] = le.fit_transform(df['sentiment'])
 # print(df[["text","sentiment"]].head())
 
 # L=[]
@@ -102,13 +107,71 @@ df['sentiment'] = le.fit_transform(df['sentiment'])
 # df['sentiment'] = le.fit_transform(df['sentiment'])
 
 # print(eval(df[df["id"]==0]["embedding"][0])[0])
-# Connect to your MongoDB database
-# client = pymongo.MongoClient(mongo_url)
-# db = client["RemiGOAT"]
-# collection = db["Message"]
+
+client = pymongo.MongoClient(mongo_url)
+db = client["RemiGOAT"]
+collection_msg = db["Message"]
+collection_forum = db["Forum"]
+collection_thread_embed = db["ThreadEmbed"]
+
+tokenizer = BertTokenizer.from_pretrained('sentence-transformers/all-mpnet-base-v2')
+model = BertModel.from_pretrained('sentence-transformers/all-mpnet-base-v2')
 
 # k=0
-# for x in collection.find():
+# forum={}
+# thread_embed={}
+# for x in collection_forum.find():
+#   forum[x["_id"]]=[]
+#   print(len(forum))
+# for x in collection_msg.find():
+#   forum[x["thread_id"]].append(x["body"])
+# for _id in forum.keys():
+#   try :
+#     if len(forum[_id])>0:
+#       print(_id)
+#       x=self_concat_vector_embeddings_np(list(forum[_id]),tokenizer,model)
+#       embed_vector=x.mean(0).tolist()
+#       #print(x)
+#       collection_thread_embed.insert_one({'embed_vector': embed_vector, '_id': _id})
+#       k+=1
+#   except : pass
+def find_thread(sentence:str,tokenizer,model):
+  global collection_thread_embed
+  k=0
+  similarity={}
+  test_sentence_embedding=get_sentence_embedding("sentence", tokenizer, model)
+  for x in collection_thread_embed.find():
+    _id=x["_id"]
+    similarity[_id]=torch.nn.functional.cosine_similarity(torch.tensor(x["embed_vector"]),test_sentence_embedding,0).item()
+    print(similarity[_id])
+  L=list(similarity.values())
+  m=max(range(len(L)), key=L.__getitem__)
+  max_id=list(similarity.keys())[m]
+  return max_id
+
+def find_thread_message(thread_id:str,sentence:str,tokenizer,model):
+  global collection_msg
+  k=0
+  similarity={}
+  test_sentence_embedding=get_sentence_embedding("sentence", tokenizer, model)
+  for x in collection_msg.find({'thread_id':thread_id}):
+    _id=x["message_id"]
+    similarity[_id]=torch.nn.functional.cosine_similarity(get_sentence_embedding(x["body"],tokenizer,model),test_sentence_embedding,0).item()
+    print(similarity[_id])
+  L=list(similarity.values())
+  m=max(range(len(L)), key=L.__getitem__)
+  max_id=list(similarity.keys())[m]
+  return max_id
+
+def faq(sentence:str,tokenizer,model):
+  thread_id=find_thread(sentence,tokenizer,model)
+  _id=find_thread_message(thread_id,sentence, tokenizer, model)
+  return _id
+
+if __name__=="__main__":
+  id_=faq("Je souhaite apprendre", tokenizer, model)
+  print(id_)
+
 #   criteria = {"_id": x["_id"]}
 #   embed=get_sentence_embedding(x["body"]).detach().cpu().numpy().tolist()
 #   update_data = {"$set": {"embedding": embed}}
@@ -117,79 +180,79 @@ df['sentiment'] = le.fit_transform(df['sentiment'])
 #   print(k)
 
 
-import torch
-from torch import nn
+# import torch
+# from torch import nn
 
-# Define the model class
-class TorchTextClassifier(nn.Module):
-  def __init__(self, input_dim, hidden_dim, hidden_dim_2, num_classes,tokenizer,model_transformer):
-    super(TorchTextClassifier, self).__init__()
-    # Define layers
-    self.get_embedding = meta_function_embedding(tokenizer,model_transformer)
-    self.linear1 = nn.Linear(input_dim, hidden_dim)
-    self.relu = nn.ReLU()
-    self.linear2 = nn.Linear(hidden_dim, hidden_dim_2)
-    self.linear3 = nn.Linear(hidden_dim_2, num_classes)
-    self.softmax = nn.Softmax(dim=-1)
+# # Define the model class
+# class TorchTextClassifier(nn.Module):
+#   def __init__(self, input_dim, hidden_dim, hidden_dim_2, num_classes,tokenizer,model_transformer):
+#     super(TorchTextClassifier, self).__init__()
+#     # Define layers
+#     self.get_embedding = meta_function_embedding(tokenizer,model_transformer)
+#     self.linear1 = nn.Linear(input_dim, hidden_dim)
+#     self.relu = nn.ReLU()
+#     self.linear2 = nn.Linear(hidden_dim, hidden_dim_2)
+#     self.linear3 = nn.Linear(hidden_dim_2, num_classes)
+#     self.softmax = nn.Softmax(dim=-1)
 
-  def forward(self, x:str):
-    # Pass through layers
-    x = self.get_embedding(x)
-    x = self.linear1(x)
-    x = self.relu(x)
-    x = self.linear2(x)
-    x = self.relu(x)
-    x = self.linear3(x)
-    x = self.softmax(x)
-    return x
+#   def forward(self, x:str):
+#     # Pass through layers
+#     x = self.get_embedding(x)
+#     x = self.linear1(x)
+#     x = self.relu(x)
+#     x = self.linear2(x)
+#     x = self.relu(x)
+#     x = self.linear3(x)
+#     x = self.softmax(x)
+#     return x
 
-# Example usage
-# Assuming your data is in a NumPy array called 'data' with shape (n_samples, input_dim)
-# and labels in another NumPy array called 'labels' with shape (n_samples,)
+# # Example usage
+# # Assuming your data is in a NumPy array called 'data' with shape (n_samples, input_dim)
+# # and labels in another NumPy array called 'labels' with shape (n_samples,)
 
-# Define model parameters
-input_dim = 768 # Get the number of features from data
-hidden_dim = 64  # Define the size of the hidden layer
-hidden_dim_2 = 32
-num_classes = 3  # Get the number of unique categories in labels
+# # Define model parameters
+# input_dim = 768 # Get the number of features from data
+# hidden_dim = 64  # Define the size of the hidden layer
+# hidden_dim_2 = 32
+# num_classes = 3  # Get the number of unique categories in labels
 
-tokenizer = BertTokenizer.from_pretrained('sentence-transformers/all-mpnet-base-v2')
-model_transformer = BertModel.from_pretrained('sentence-transformers/all-mpnet-base-v2')
+# tokenizer = BertTokenizer.from_pretrained('sentence-transformers/all-mpnet-base-v2')
+# model_transformer = BertModel.from_pretrained('sentence-transformers/all-mpnet-base-v2')
 
-# Create the model instance
-model = TorchTextClassifier(input_dim, hidden_dim, hidden_dim_2, num_classes,tokenizer,model_transformer)
+# # Create the model instance
+# model = TorchTextClassifier(input_dim, hidden_dim, hidden_dim_2, num_classes,tokenizer,model_transformer)
 
-# Define loss function and optimizer (replace these based on your needs)
-criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters())
+# # Define loss function and optimizer (replace these based on your needs)
+# criterion = nn.CrossEntropyLoss()
+# optimizer = torch.optim.Adam(model.parameters())
 
-# Training loop
-for epoch in range(10):  # loop over the dataset multiple times
-    for index, row in df.iterrows():
-        # get the inputs; data is a list of tuples (images, labels)
-        inputs = row["text"]
-        if row["sentiment"] == 0:
-          labels=[1,0,0]
-        elif row["sentiment"] == 1:
-          labels=[0,1,0]
-        else :
-          labels=[0,0,1]
-        labels=torch.tensor(labels)
-        # zero the parameter gradients
-        optimizer.zero_grad()
+# # Training loop
+# for epoch in range(10):  # loop over the dataset multiple times
+#     for index, row in df.iterrows():
+#         # get the inputs; data is a list of tuples (images, labels)
+#         inputs = row["text"]
+#         if row["sentiment"] == 0:
+#           labels=[1,0,0]
+#         elif row["sentiment"] == 1:
+#           labels=[0,1,0]
+#         else :
+#           labels=[0,0,1]
+#         labels=torch.tensor(labels)
+#         # zero the parameter gradients
+#         optimizer.zero_grad()
 
-        # forward pass
-        outputs = model(inputs)
-        loss = criterion(outputs, labels.float())
+#         # forward pass
+#         outputs = model(inputs)
+#         loss = criterion(outputs, labels.float())
 
-        # backward pass
-        loss.backward()
+#         # backward pass
+#         loss.backward()
 
-        # update the model parameters
-        optimizer.step()
+#         # update the model parameters
+#         optimizer.step()
 
-        if index % 100 == 99:  # print every 100 mini-batches
-            print(f'Epoch {epoch+1}, Batch {index+1}, Loss: {loss.item()}')
+#         if index % 100 == 99:  # print every 100 mini-batches
+#             print(f'Epoch {epoch+1}, Batch {index+1}, Loss: {loss.item()}')
 # Prediction example
 # Convert data to tensor
 # test_data = torch.from_numpy(data[0]).float()  # Assuming you want to predict for the first sample
