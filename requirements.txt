@@ -1,12 +1,10 @@
 streamlit
 torch
 torchmetrics
-keras
 pandas
 numpy
 pymongo
 transformers
-mlflow
 setuptools
 python-dotenv
 scikit-learn
