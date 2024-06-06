@@ -1,4 +1,4 @@
-steamlit
+streamlit
 torch
 torchmetrics
 keras
