@@ -9,9 +9,7 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-RUN git clone https://github.com/data-IA-2023/RedAlexMooc.git
-
-WORKDIR "/RedAlexMooc"
+RUN git clone https://github.com/data-IA-2023/RedAlexMooc.git .
 
 RUN pip3 install -r requirements.txt
 
