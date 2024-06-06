@@ -1,12 +1,12 @@
-streamlit
 torch
 torchmetrics
 pandas
 numpy
-pymongo
 transformers
 setuptools
 python-dotenv
 scikit-learn
 deep_translator
 langdetect
+streamlit
+pymongo
