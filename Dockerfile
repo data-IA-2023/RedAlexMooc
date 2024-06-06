@@ -13,6 +13,8 @@ RUN git clone https://github.com/data-IA-2023/RedAlexMooc.git
 
 RUN pip3 install -r requirements.txt
 
+RUN cd RedAlexMooc/
+
 EXPOSE 8501
 
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
