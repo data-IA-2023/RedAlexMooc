@@ -1,3 +1,4 @@
+steamlit
 torch
 torchmetrics
 keras
@@ -14,4 +15,3 @@ scikit-learn
 deep_translator
 langdetect
 tensorflow
-steamlit
