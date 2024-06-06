@@ -10,3 +10,4 @@ deep_translator
 langdetect
 streamlit
 pymongo
+tensorflow
