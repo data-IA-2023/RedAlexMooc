@@ -14,3 +14,4 @@ scikit-learn
 deep_translator
 langdetect
 tensorflow
+steamlit
