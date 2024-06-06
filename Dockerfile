@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 
 RUN git clone https://github.com/data-IA-2023/RedAlexMooc.git
 
-RUN cd RedAlexMooc/
+WORKDIR "/RedAlexMooc"
 
 RUN pip3 install -r requirements.txt
 
