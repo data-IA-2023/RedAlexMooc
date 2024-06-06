@@ -5,8 +5,6 @@ keras
 pandas
 numpy
 pymongo
-keras
-tf-keras
 transformers
 mlflow
 setuptools
@@ -14,4 +12,3 @@ python-dotenv
 scikit-learn
 deep_translator
 langdetect
-tensorflow
