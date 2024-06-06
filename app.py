@@ -4,6 +4,7 @@ from datetime import datetime
 import re
 from Sentiment_analysis import translate_and_analyse_sentiment
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
 
