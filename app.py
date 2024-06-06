@@ -3,9 +3,13 @@ from pymongo import MongoClient
 from datetime import datetime
 import re
 from Sentiment_analysis import translate_and_analyse_sentiment
+from dotenv import load_dotenv
 
+load_dotenv()
+
+MONGOURL   = os.environ.get('MONGOURL')
 # MongoDB connection
-client = MongoClient('mongodb://localhost:27017')
+client = MongoClient(MONGOURL)
 db = client['RemiGOAT']
 users_collection = db['UserData']
 
