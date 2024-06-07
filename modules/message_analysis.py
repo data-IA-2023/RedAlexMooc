@@ -5,7 +5,7 @@ from transformers import BertTokenizer, BertModel
 from sklearn import preprocessing
 import numpy as np
 from dotenv import load_dotenv
-sys.path.append("modules")
+# sys.path.append("modules")
 # from check_enc import *
 import pymongo
 import pandas as pd
@@ -84,7 +84,7 @@ def find_thread(sentence:str,tokenizer,model)->str:
     global collection_thread_embed
     k=0
     similarity={}
-    test_sentence_embedding=get_sentence_embedding("sentence", tokenizer, model)
+    test_sentence_embedding=get_sentence_embedding(sentence, tokenizer, model)
     for x in collection_thread_embed.find():
         _id=x["_id"]
         similarity[_id]=torch.nn.functional.cosine_similarity(torch.tensor(x["embed_vector"]),test_sentence_embedding,0).item()
@@ -109,7 +109,7 @@ def find_thread_message(thread_id:str,sentence:str,tokenizer,model)->str:
     global collection_msg
     k=0
     similarity={}
-    test_sentence_embedding=get_sentence_embedding("sentence", tokenizer, model)
+    test_sentence_embedding=get_sentence_embedding(sentence, tokenizer, model)
     for x in collection_msg.find({'thread_id':thread_id}):
         _id=x["message_id"]
         similarity[_id]=torch.nn.functional.cosine_similarity(get_sentence_embedding(x["body"],tokenizer,model),test_sentence_embedding,0).item()
