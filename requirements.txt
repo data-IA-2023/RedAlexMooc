@@ -6,6 +6,7 @@ transformers
 setuptools
 python-dotenv
 scikit-learn
+mlflow
 deep_translator
 langdetect
 streamlit

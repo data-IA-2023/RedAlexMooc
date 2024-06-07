@@ -1,7 +1,8 @@
-# Ce module est compatible avec python 3.10, 3.11 et 3.12.
-import deep_translator  # Importation de la bibliothèque pour la traduction
-from transformers import RobertaTokenizerFast, TFRobertaForSequenceClassification, pipeline  # Importation des composants de Hugging Face Transformers
-from langdetect import detect  # Importation de la fonction detect de la bibliothèque langdetect
+import mlflow
+import mlflow.sklearn
+from transformers import RobertaTokenizerFast, TFRobertaForSequenceClassification, pipeline
+from langdetect import detect
+import deep_translator
 
 # Initialisation du tokenizer pour RoBERTa
 tokenizer = RobertaTokenizerFast.from_pretrained("arpanghoshal/EmoRoBERTa")
@@ -10,58 +11,22 @@ tokenizer = RobertaTokenizerFast.from_pretrained("arpanghoshal/EmoRoBERTa")
 model = TFRobertaForSequenceClassification.from_pretrained("arpanghoshal/EmoRoBERTa")
 
 # Initialisation du pipeline pour l'analyse de sentiment avec le modèle RoBERTa
-emotion_analysis = pipeline('sentiment-analysis', 
-                    model='arpanghoshal/EmoRoBERTa')
+emotion_analysis = pipeline('sentiment-analysis', model='arpanghoshal/EmoRoBERTa')
 
 # Fonction pour traduire un texte en anglais
 def translate_to_en(text=""):
-    """
-    Cette fonction prend en entrée un texte et le traduit en anglais.
-    Elle détecte d'abord la langue du texte, puis le traduit en anglais.
-
-    Args:
-        text (str): Le texte à traduire. Par défaut, c'est une chaîne vide.
-
-    Returns:
-        dict: Un dictionnaire contenant la langue détectée et le texte traduit en anglais.
-    """
-    langue=detect(text)
+    langue = detect(text)
     translated_text = deep_translator.GoogleTranslator(source=langue, target='en').translate(text)
-    return {'langue': langue, 'textTraduie':translated_text}
+    return {'langue': langue, 'textTraduit': translated_text}
 
 # Fonction pour traduire un texte en anglais et l'analyser pour l'émotion
-def translate_and_analyse(text:str):
-    """
-    Cette fonction prend un texte en entrée, le traduit en anglais, puis analyse son émotion dominante.
+def translate_and_analyse(text: str):
+    trad = translate_to_en(text)
+    emo = emotion_analysis(trad['textTraduit'])[0]['label']
+    return {'text': text, 'traduction': trad['textTraduit'], "emotion": emo, "langue": trad["langue"], 'emoticon': sentiment_to_emoticon(emo)}
 
-    Args:
-        text (str): Le texte à analyser.
-
-    Returns:
-        dict: Un dictionnaire contenant le texte d'origine, sa traduction en anglais, l'émotion détectée, 
-              la langue d'origine et une émoticône correspondant à l'émotion détectée.un exemple:
-              {'text': "c'est incroiyable.", 'traduction': "it's incredible.", 'emotion': 'admiration', 'langue': 'fr', 'emoticon': '😍'}
-              
-    """
-    trad=translate_to_en(text)
-    emo=emotion_analysis(trad['textTraduie'])[0]['label']
-    #print(type(emo),emo)
-    
-    return {'text':text,'traduction':trad['textTraduie'], "emotion" : translate_emotion_to_fr(emo), "langue" : trad["langue"], 'emoticon':sentiment_to_emoticon(emo)}
-
-def translate_and_analyse_sentiment(text:str):
-    """
-    Cette fonction prend un texte en entrée, le traduit en anglais, puis analyse son émotion dominante et ajoute le sentiment général qui s'en dégage..
-
-    Args:
-        text (str): Le texte à analyser.
-
-    Returns:
-        dict: Un dictionnaire contenant le texte d'origine, sa traduction en anglais, l'émotion détectée, 
-              la langue d'origine et une émoticône correspondant à l'émotion détectée.un exemple:
-              {'text': "c'est incroiyable.", 'traduction': "it's incredible.", 'emotion': 'admiration', 'langue': 'fr', 'emoticon': '😍', 'sentiment': 'positive'}
-              
-    """
+# Fonction pour traduire un texte en anglais et l'analyser pour l'émotion et le sentiment
+def translate_and_analyse_sentiment(text: str):
     sentiment_dict = {
         "admiration": "positive",
         "amusement": "positive",
@@ -92,20 +57,11 @@ def translate_and_analyse_sentiment(text:str):
         "surprise": "neutral",
         "neutral": "neutral"
     }
-    dict0=translate_and_analyse(text)
-    dict0["sentiment"]=sentiment_dict.get(dict0["emotion"].lower(), None)
+    dict0 = translate_and_analyse(text)
+    dict0["sentiment"] = sentiment_dict.get(dict0["emotion"].lower(), None)
     return dict0
 
 def sentiment_to_emoticon(sentiment):
-    """
-    Cette fonction prend un sentiment en entrée et renvoie une émoticône équivalente.
-
-    Args:
-        sentiment (str): Le sentiment à traduire en émoticône.
-
-    Returns:
-        str: L'émoticône équivalente au sentiment. Si aucun sentiment correspondant n'est trouvé, la fonction renvoie None.
-    """
     emoticon_dict = {
         "admiration": "😍",
         "amusement": "😄",
@@ -139,18 +95,7 @@ def sentiment_to_emoticon(sentiment):
 
     return emoticon_dict.get(sentiment.lower(), None)
 
-
 def translate_emotion_to_fr(emotion):
-    """
-    Cette fonction prend une émotion en anglais en entrée et la traduit en français.
-
-    Args:
-        emotion (str): L'émotion à traduire.
-
-    Returns:
-        str: L'émotion traduite en français. Si aucune traduction n'est disponible, la fonction renvoie None.
-    """
-    # Dictionnaire pour traduire les émotions en français
     emotion_dict = {
         "admiration": "admiration",
         "amusement": "amusement",
@@ -181,11 +126,29 @@ def translate_emotion_to_fr(emotion):
         "surprise": "surprise",
         "neutral": "neutre"
     }
-    try : return emotion_dict[emotion.lower()]
-    except : return None
-
+    try:
+        return emotion_dict[emotion.lower()]
+    except:
+        return None
 
 if __name__ == "__main__":
-    # Exemple d'utilisation de la fonction translate_and_analyse avec le texte "Je t'aime."
-    emotion_labels = translate_and_analyse_sentiment("es increíble")
-    print(emotion_labels)
+    # Initialisation de MLflow
+    mlflow.set_experiment("Text Analysis with Emotion Detection")
+
+    with mlflow.start_run(run_name="translate_and_analyse_sentiment") as run:
+        # Exemple d'utilisation de la fonction translate_and_analyse avec le texte "es increíble"
+        text = "es increíble"
+        emotion_labels = translate_and_analyse_sentiment(text)
+        
+        # Enregistrement des paramètres et métriques dans MLflow
+        mlflow.log_param("text", text)
+        mlflow.log_param("langue", emotion_labels['langue'])
+        mlflow.log_param("traduction", emotion_labels['traduction'])
+        mlflow.log_param("emotion", emotion_labels['emotion'])
+        mlflow.log_param("sentiment", emotion_labels['sentiment'])
+        mlflow.log_param("emoticon", emotion_labels['emoticon'])
+        
+        # Enregistrer le modèle dans MLflow
+        mlflow.sklearn.save_model(model, "model")
+        
+        print(emotion_labels)
